@@ -9,22 +9,14 @@ public class MyBot : IChessBot
     Move move;
     public Move Think(Board board, Timer timer)
     {
-        Console.WriteLine(moveEvaluater(board, 3, -1000000, 1000000, board.IsWhiteToMove));
+        Console.WriteLine(moveEvaluater(board, 4, -1000000, 1000000, board.IsWhiteToMove));
         return move;
     }
     private double moveEvaluater(Board board, double depth, double alpha, double beta, bool white){
         
         total++;
         
-        /*if(board.IsInCheck()){
-            movesMade -= 0.75;
-            if(white){
-                pos -= 2;
-            }
-            else{
-                pos +=2;
-            }
-        }
+        /*
         if(BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard) < 8){
             if(movesMade > 3){
                 return eval;
@@ -33,9 +25,7 @@ public class MyBot : IChessBot
         else if(movesMade > 3){
             return eval;
         }
-        if(board.IsDraw()){
-            return 0;
-        }
+        
         board.MakeMove(move);
         if(board.IsInCheckmate() && white){
             board.UndoMove(move);
@@ -116,7 +106,7 @@ public class MyBot : IChessBot
                 }
                 alpha = Math.Max(alpha, value);
             }
-            if(depth == 3){
+            if(depth == 4){
                 move = moves[index];
             }
             return value;
@@ -136,7 +126,7 @@ public class MyBot : IChessBot
                 }
                 beta = Math.Min(beta, value);
             }
-            if(depth == 3){
+            if(depth == 4){
                 move = moves[index];
             }
             return value;
@@ -147,8 +137,25 @@ public class MyBot : IChessBot
         return list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
     }
     private double positionEvaluator(Board board, bool white){
+        if(board.IsDraw()){
+            return 0;
+        }
+        if(board.IsInCheckmate() && white){
+            return -1000000;
+        }
+        else if(board.IsInCheckmate()){
+            return 1000000;
+        }
         Move[] moves = board.GetLegalMoves();
-        double pos;
+        double pos = 0;
+        if(board.IsInCheck()){
+            if(white){
+                pos += 1;
+            }
+            else{
+                pos -=1;
+            }
+        }
         if(white){
             pos = Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000;
         }
