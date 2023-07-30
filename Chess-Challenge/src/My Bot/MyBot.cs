@@ -1,10 +1,11 @@
 ﻿using ChessChallenge.API;
 using System;
+using System.Collections.Generic;
 
 public class MyBot : IChessBot
 {
     // Piece values: null, pawn, knight, bishop, rook, queen, king
-    double[] pieceValues = { 0, 1, 3, 3.01, 5, 9, 100 };
+    double[] pieceValues = { 0, 1, 3, 3.10, 5, 9, 100 };
     int total = 0;
     Move move;
     public Move Think(Board board, Timer timer)
@@ -26,17 +27,6 @@ public class MyBot : IChessBot
             return eval;
         }
         
-        board.MakeMove(move);
-        if(board.IsInCheckmate() && white){
-            board.UndoMove(move);
-            Console.WriteLine(move);
-            return 1000000;
-        }
-        else if(board.IsInCheckmate()){
-            board.UndoMove(move);
-            return -1000000;
-        }
-        pos = positionEvaluator(board, white);
         if(board.PlyCount < 4 && move.MovePieceType == PieceType.Pawn){
             if(white){
                 pos += 0.3;
@@ -83,7 +73,35 @@ public class MyBot : IChessBot
             }
         }
         */
+        if(board.IsDraw()){
+            return 0;
+        }
+        if(board.IsInCheckmate() && white){
+            return -1000000 * (depth + 1);
+        }
+        else if(board.IsInCheckmate()){
+            return 1000000 * (depth + 1);
+        }
         Move[] moves = board.GetLegalMoves();
+        List<Move> checks = new List<Move>();
+        List<Move> captures = new List<Move>();
+        List<Move> other = new List<Move>();
+        foreach (Move move in moves) {
+            if(move.IsCapture){
+                captures.Add(move);
+            }
+            else{
+                board.MakeMove(move);
+                if(board.IsInCheck()){
+                    checks.Add(move);
+                }
+                else{
+                    other.Add(move);
+                }
+                board.UndoMove(move);
+            }
+        }
+        int amtOfChecks = checks.Count;
         int index = 0;
         if(depth <= 0 || moves.Length == 0){
             double returnVal = positionEvaluator(board, white);
@@ -94,40 +112,76 @@ public class MyBot : IChessBot
         if(white){
             value = -10000000;
             for(int i = 0; i < moves.Length; i++){
-                board.MakeMove(moves[i]);
+                Move currentMove;
+                if(i < checks.Count){
+                    currentMove = checks[i];
+                }
+                else if(i < checks.Count + captures.Count){
+                    currentMove = captures[i-checks.Count];
+                }
+                else{
+                    currentMove = other[i-(checks.Count + captures.Count)];
+                }
+                board.MakeMove(currentMove);
                 double eval = moveEvaluater(board, depth - 1, alpha, beta, false);
                 if(eval > value){
                     value = eval;
                     index = i;
                 }
-                board.UndoMove(moves[i]);
+                board.UndoMove(currentMove);
                 if(value > beta){
                     break;
                 }
                 alpha = Math.Max(alpha, value);
             }
             if(depth == 4){
-                move = moves[index];
+                if(index < checks.Count){
+                    move = checks[index];
+                }
+                else if(index < checks.Count + captures.Count){
+                    move =  captures[index-checks.Count];
+                }
+                else{
+                    move =  other[index-(checks.Count + captures.Count)];
+                }
             }
             return value;
         }
         else{
             value = 10000000;
             for(int i = 0; i < moves.Length; i++){
-                board.MakeMove(moves[i]);
+                Move currentMove;
+                if(i < checks.Count){
+                    currentMove = checks[i];
+                }
+                else if(i < checks.Count + captures.Count){
+                    currentMove = captures[i-checks.Count];
+                }
+                else{
+                    currentMove = other[i - (checks.Count + captures.Count)];
+                }
+                board.MakeMove(currentMove);
                 double eval = moveEvaluater(board, depth - 1, alpha, beta, true);
                 if(eval < value){
                     value = eval;
                     index = i;
                 }
-                board.UndoMove(moves[i]);
+                board.UndoMove(currentMove);
                 if(value < alpha){
                     break;
                 }
                 beta = Math.Min(beta, value);
             }
             if(depth == 4){
-                move = moves[index];
+                if(index < checks.Count){
+                    move  = checks[index];
+                }
+                else if(index < checks.Count + captures.Count){
+                    move =  captures[index-checks.Count];
+                }
+                else{
+                    move =  other[index-(checks.Count + captures.Count)];
+                }
             }
             return value;
         }
@@ -137,15 +191,7 @@ public class MyBot : IChessBot
         return list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
     }
     private double positionEvaluator(Board board, bool white){
-        if(board.IsDraw()){
-            return 0;
-        }
-        if(board.IsInCheckmate() && white){
-            return -1000000;
-        }
-        else if(board.IsInCheckmate()){
-            return 1000000;
-        }
+        
         Move[] moves = board.GetLegalMoves();
         double pos = 0;
         if(board.IsInCheck()){
