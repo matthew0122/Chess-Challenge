@@ -11,6 +11,7 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         Console.WriteLine(moveEvaluater(board, 4, -1000000, 1000000, board.IsWhiteToMove));
+        //Console.WriteLine(total);
         return move;
     }
     private double moveEvaluater(Board board, double depth, double alpha, double beta, bool white){
@@ -112,16 +113,7 @@ public class MyBot : IChessBot
         if(white){
             value = -10000000;
             for(int i = 0; i < moves.Length; i++){
-                Move currentMove;
-                if(i < checks.Count){
-                    currentMove = checks[i];
-                }
-                else if(i < checks.Count + captures.Count){
-                    currentMove = captures[i-checks.Count];
-                }
-                else{
-                    currentMove = other[i-(checks.Count + captures.Count)];
-                }
+                Move currentMove = getMove(checks, captures, other, i);
                 board.MakeMove(currentMove);
                 double eval = moveEvaluater(board, depth - 1, alpha, beta, false);
                 if(eval > value){
@@ -135,31 +127,14 @@ public class MyBot : IChessBot
                 alpha = Math.Max(alpha, value);
             }
             if(depth == 4){
-                if(index < checks.Count){
-                    move = checks[index];
-                }
-                else if(index < checks.Count + captures.Count){
-                    move =  captures[index-checks.Count];
-                }
-                else{
-                    move =  other[index-(checks.Count + captures.Count)];
-                }
+                move = getMove(checks, captures, other, index);
             }
             return value;
         }
         else{
             value = 10000000;
             for(int i = 0; i < moves.Length; i++){
-                Move currentMove;
-                if(i < checks.Count){
-                    currentMove = checks[i];
-                }
-                else if(i < checks.Count + captures.Count){
-                    currentMove = captures[i-checks.Count];
-                }
-                else{
-                    currentMove = other[i - (checks.Count + captures.Count)];
-                }
+                Move currentMove = getMove(checks, captures, other, i);
                 board.MakeMove(currentMove);
                 double eval = moveEvaluater(board, depth - 1, alpha, beta, true);
                 if(eval < value){
@@ -173,17 +148,20 @@ public class MyBot : IChessBot
                 beta = Math.Min(beta, value);
             }
             if(depth == 4){
-                if(index < checks.Count){
-                    move  = checks[index];
-                }
-                else if(index < checks.Count + captures.Count){
-                    move =  captures[index-checks.Count];
-                }
-                else{
-                    move =  other[index-(checks.Count + captures.Count)];
-                }
+                move = getMove(checks, captures, other, index);
             }
             return value;
+        }
+    }
+    private Move getMove(List<Move> checks, List<Move> captures, List<Move> others, int index){
+        if(index < checks.Count){
+            return checks[index];
+        }
+        else if(index < checks.Count + captures.Count){
+            return captures[index-checks.Count];
+        }
+        else{
+            return others[index-(checks.Count + captures.Count)];
         }
     }
     private int materialDifference(Board board){
@@ -195,19 +173,9 @@ public class MyBot : IChessBot
         Move[] moves = board.GetLegalMoves();
         double pos = 0;
         if(board.IsInCheck()){
-            if(white){
-                pos += 1;
-            }
-            else{
-                pos -=1;
-            }
+            pos = white ? pos+1 : pos-1;
         }
-        if(white){
-            pos = Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000;
-        }
-        else{
-            pos = Math.Cbrt(moves.Length - 15.0) * board.PlyCount / -3000;
-        }
+        pos = (white) ? Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000 : Math.Cbrt(moves.Length - 15.0) * board.PlyCount / -3000;
         pos += materialDifference(board);
         pos += getSpaceAdvantage(board) / 10;
         return pos;
@@ -218,34 +186,22 @@ public class MyBot : IChessBot
     public int getSpaceAdvantageSide(Board board, bool white){
         PieceList[] pieces = board.GetAllPieceLists();
         int whiteSquaresAttacked = 0;
-        int listLoc = 0;
-        if(!white){
-            listLoc += 6;
-        }
-        PieceList pieceList = pieces[listLoc];
-        for(int j=0; j < pieceList.Count; j++){
-            Piece piece = pieceList.GetPiece(j);
+        int listLoc;
+        listLoc = white ? 0 : 6;
+        foreach(Piece piece in pieces[listLoc++]){
             whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPawnAttacks(piece.Square, white));
         }
-        pieceList = pieces[++listLoc];
-        for(int j=0; j < pieceList.Count; j++){
-            Piece piece = pieceList.GetPiece(j);
-            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetKnightAttacks(piece.Square));
+        foreach(Piece piece in pieces[listLoc++]){
+            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPawnAttacks(piece.Square, white));
         }
-        pieceList = pieces[++listLoc];
-        for(int j=0; j < pieceList.Count; j++){
-            Piece piece = pieceList.GetPiece(j);
-            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetSliderAttacks(PieceType.Bishop, piece.Square, board));
+        foreach(Piece piece in pieces[listLoc++]){
+            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPawnAttacks(piece.Square, white));
         }
-        pieceList = pieces[++listLoc];
-        for(int j=0; j < pieceList.Count; j++){
-            Piece piece = pieceList.GetPiece(j);
-            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetSliderAttacks(PieceType.Rook, piece.Square, board));
+        foreach(Piece piece in pieces[listLoc++]){
+            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPawnAttacks(piece.Square, white));
         }
-        pieceList = pieces[++listLoc];
-        for(int j=0; j < pieceList.Count; j++){
-            Piece piece = pieceList.GetPiece(j);
-            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetSliderAttacks(PieceType.Queen, piece.Square, board));
+        foreach(Piece piece in pieces[listLoc++]){
+            whiteSquaresAttacked += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPawnAttacks(piece.Square, white));
         }
         return whiteSquaresAttacked;
     }
