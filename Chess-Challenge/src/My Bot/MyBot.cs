@@ -11,6 +11,8 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         Console.WriteLine(moveEvaluater(board, 4, -1000000, 1000000, board.IsWhiteToMove));
+        //BitboardHelper.VisualizeBitboard(board.WhitePiecesBitboard);
+        Console.WriteLine(positionEvaluator(board, board.IsWhiteToMove));
         //Console.WriteLine(total);
         return move;
     }
@@ -18,16 +20,7 @@ public class MyBot : IChessBot
         
         total++;
         
-        /*
-        if(BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard) < 8){
-            if(movesMade > 3){
-                return eval;
-            }
-        }
-        else if(movesMade > 3){
-            return eval;
-        }
-        
+        /*      
         if(board.PlyCount < 4 && move.MovePieceType == PieceType.Pawn){
             if(white){
                 pos += 0.3;
@@ -65,23 +58,12 @@ public class MyBot : IChessBot
                 
             }
         }
-        if(board.IsInCheck()){
-            if(white){
-                pos += 0.3;
-            }
-            else{
-                pos -= 0.3;
-            }
-        }
         */
         if(board.IsDraw()){
             return 0;
         }
-        if(board.IsInCheckmate() && white){
-            return -1000000 * (depth + 1);
-        }
-        else if(board.IsInCheckmate()){
-            return 1000000 * (depth + 1);
+        if(board.IsInCheckmate()){
+            return white ? -1000000 - depth : 1000000 + depth;
         }
         Move[] moves = board.GetLegalMoves();
         List<Move> checks = new List<Move>();
@@ -169,7 +151,6 @@ public class MyBot : IChessBot
         return list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
     }
     private double positionEvaluator(Board board, bool white){
-        
         Move[] moves = board.GetLegalMoves();
         double pos = 0;
         if(board.IsInCheck()){
@@ -178,6 +159,12 @@ public class MyBot : IChessBot
         pos = (white) ? Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000 : Math.Cbrt(moves.Length - 15.0) * board.PlyCount / -3000;
         pos += materialDifference(board);
         pos += getSpaceAdvantage(board) / 10;
+        if((board.GetPieceBitboard(PieceType.Pawn, true) & 103481868288) != 0){
+            pos += 0.5;
+        }
+        else if((board.GetPieceBitboard(PieceType.Pawn, false) & 103481868288) != 0){
+            pos-= 0.5;
+        }
         return pos;
     }
     private int getSpaceAdvantage(Board board){           
