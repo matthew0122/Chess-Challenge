@@ -7,64 +7,36 @@ public class MyBot : IChessBot
     // Piece values: null, pawn, knight, bishop, rook, queen, king
     double[] pieceValues = { 0, 1, 3, 3.10, 5, 9, 100 };
     int total = 0;
-    Move move;
+    Move bestMove;
     public Move Think(Board board, Timer timer)
     {
-        Console.WriteLine(moveEvaluater(board, 4, -1000000, 1000000, board.IsWhiteToMove));
+        double eval = 0;
+        int maxDepth = 1;
+        Console.WriteLine(timer.MillisecondsRemaining / 30);
+        for(int depth = 1; depth < 100; depth++){
+            maxDepth = depth;
+            eval = moveEvaluater(board, timer, depth, -1000000, 1000000, 0);
+            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
+                break;
+        }
+        Console.WriteLine(timer.MillisecondsElapsedThisTurn);
+        Console.WriteLine(maxDepth);
+        //Console.WriteLine(eval);
+        //Console.WriteLine(moveEvaluater(board, 4, -1000000, 1000000, board.IsWhiteToMove));
         //BitboardHelper.VisualizeBitboard(board.WhitePiecesBitboard);
-        Console.WriteLine(positionEvaluator(board, board.IsWhiteToMove));
+        //Console.WriteLine(positionEvaluator(board, board.IsWhiteToMove));
         //Console.WriteLine(total);
-        return move;
+        return bestMove;
     }
-    private double moveEvaluater(Board board, double depth, double alpha, double beta, bool white){
+    private double moveEvaluater(Board board, Timer timer, double depth, double alpha, double beta, int ply){
         
         total++;
-        
-        /*      
-        if(board.PlyCount < 4 && move.MovePieceType == PieceType.Pawn){
-            if(white){
-                pos += 0.3;
-            }
-            else{
-                pos -= 0.3;
-            }
-        }
-        else if(board.PlyCount < 10 && (move.MovePieceType == PieceType.King || move.MovePieceType == PieceType.Pawn || move.MovePieceType == PieceType.Queen)){
-            if(white){
-                pos -= 0.3;
-            }
-            else{
-                pos += 0.3;
-            }
-        }
-        if(move.IsCastles){
-            if(white){
-                pos += 0.8;
-            }
-            else{
-                pos -= 0.8;
-            }
-        }
-        if(move.IsCapture){
-            PieceType captured = move.CapturePieceType;
-            PieceType capturer = move.MovePieceType;
-            if(pieceValues[(int)captured] > pieceValues[(int)capturer]){
-                if(!white){
-                    pos += pieceValues[(int)captured] - pieceValues[(int)capturer];
-                }
-                else{
-                    pos -= pieceValues[(int)captured] - pieceValues[(int)capturer];
-                }
-                
-            }
-        }
-        */
         if(board.IsDraw()){
             return 0;
         }
-        if(board.IsInCheckmate()){
+        /*if(board.IsInCheckmate()){
             return white ? -1000000 - depth : 1000000 + depth;
-        }
+        }*/
         Move[] moves = board.GetLegalMoves();
         List<Move> checks = new List<Move>();
         List<Move> captures = new List<Move>();
@@ -84,56 +56,29 @@ public class MyBot : IChessBot
                 board.UndoMove(move);
             }
         }
-        int amtOfChecks = checks.Count;
-        int index = 0;
+        double best = positionEvaluator(board);
         if(depth <= 0 || moves.Length == 0){
-            double returnVal = positionEvaluator(board, white);
-            return returnVal;
+            return best;
         }
         
-        double value;
-        if(white){
-            value = -10000000;
-            for(int i = 0; i < moves.Length; i++){
-                Move currentMove = getMove(checks, captures, other, i);
-                board.MakeMove(currentMove);
-                double eval = moveEvaluater(board, depth - 1, alpha, beta, false);
-                if(eval > value){
-                    value = eval;
-                    index = i;
-                }
-                board.UndoMove(currentMove);
-                if(value > beta){
-                    break;
-                }
-                alpha = Math.Max(alpha, value);
+        best = -30000;
+        for(int i = 0; i < moves.Length; i++) {
+            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return -3000000;
+
+            Move move = getMove(checks, captures, other, i);
+            board.MakeMove(move);
+            double score = -moveEvaluater(board, timer, depth-1, -beta, -alpha, ply + 1);
+            board.UndoMove(move);
+            if(score >= beta){
+                return beta;
             }
-            if(depth == 4){
-                move = getMove(checks, captures, other, index);
+            if(score > alpha){
+                alpha = score;
+                if(ply == 0) bestMove = move;
             }
-            return value;
         }
-        else{
-            value = 10000000;
-            for(int i = 0; i < moves.Length; i++){
-                Move currentMove = getMove(checks, captures, other, i);
-                board.MakeMove(currentMove);
-                double eval = moveEvaluater(board, depth - 1, alpha, beta, true);
-                if(eval < value){
-                    value = eval;
-                    index = i;
-                }
-                board.UndoMove(currentMove);
-                if(value < alpha){
-                    break;
-                }
-                beta = Math.Min(beta, value);
-            }
-            if(depth == 4){
-                move = getMove(checks, captures, other, index);
-            }
-            return value;
-        }
+        //Console.WriteLine(best);
+        return alpha;
     }
     private Move getMove(List<Move> checks, List<Move> captures, List<Move> others, int index){
         if(index < checks.Count){
@@ -148,24 +93,24 @@ public class MyBot : IChessBot
     }
     private int materialDifference(Board board){
         PieceList[] list = board.GetAllPieceLists();
-        return list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
+        int total = list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
+        return total;
     }
-    private double positionEvaluator(Board board, bool white){
+    private double positionEvaluator(Board board){
         Move[] moves = board.GetLegalMoves();
-        double pos = 0;
+        double pos = Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000;
         if(board.IsInCheck()){
-            pos = white ? pos+1 : pos-1;
+            pos++;
         }
-        pos = (white) ? Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000 : Math.Cbrt(moves.Length - 15.0) * board.PlyCount / -3000;
         pos += materialDifference(board);
         pos += getSpaceAdvantage(board) / 10;
         if((board.GetPieceBitboard(PieceType.Pawn, true) & 103481868288) != 0){
             pos += 0.5;
         }
-        else if((board.GetPieceBitboard(PieceType.Pawn, false) & 103481868288) != 0){
+        if((board.GetPieceBitboard(PieceType.Pawn, false) & (ulong)103481868288) != 0){
             pos-= 0.5;
         }
-        return pos;
+        return board.IsWhiteToMove ? pos : - pos;
     }
     private int getSpaceAdvantage(Board board){           
         return getSpaceAdvantageSide(board, true) - getSpaceAdvantageSide(board, false);
