@@ -5,41 +5,56 @@ using System.Collections.Generic;
 public class MyBot : IChessBot
 {
     // Piece values: null, pawn, knight, bishop, rook, queen, king
-    double[] pieceValues = { 0, 1, 3, 3.10, 5, 9, 100 };
+    int[] pieceValues = { 0, 100, 301, 311, 500, 900, 100000 };
     int total = 0;
     Move depthMove;
     Move bestMove;
-    double bestEval = 0;
+    struct TTEntry {
+        public ulong key;
+        public Move move;
+        public int depth, bound;
+        public int score;
+        public TTEntry(ulong _key, Move _move, int _depth, int _score, int _bound) {
+            key = _key; move = _move; depth = _depth; score = _score; bound = _bound;
+        }
+    }
+
+    const int entries = (1 << 20);
+    TTEntry[] transpositionTable = new TTEntry[entries];
+
     public Move Think(Board board, Timer timer)
     {
-        double eval = 0;
         int maxDepth = 1;
         bestMove = Move.NullMove;
-        Console.WriteLine("Time To Use: " + timer.MillisecondsRemaining / 30);
-        for(int depth = 1; depth < 100; depth++){ //NOT WORKING RIGHT
+        for(int depth = 1; depth < 100; depth++){
             maxDepth = depth;
-            double neweval = moveEvaluater(board, timer, depth, -1000000, 1000000, 0);
+            moveEvaluater(board, timer, depth, -1000000, 1000000, 0);
             if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
-                bestMove = depthMove;
-            eval = neweval;
+            bestMove = depthMove;
         }
-        Console.WriteLine("Time Used: " + timer.MillisecondsElapsedThisTurn + " Max Depth: " + maxDepth);
-        Console.WriteLine("Eval: " + bestEval);
         Move[] moves = board.GetLegalMoves();
-        Console.WriteLine(bestMove);
         return bestMove == Move.NullMove ? moves[0] : bestMove;
     }
-    private double moveEvaluater(Board board, Timer timer, double depth, double alpha, double beta, int ply){
+    private int moveEvaluater(Board board, Timer timer, int depth, int alpha, int beta, int ply){
         if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 0;
-        
+        ulong zobristKey = board.ZobristKey;
+        bool notRoot = ply > 0;
+        if(notRoot && board.IsRepeatedPosition()) return 0;
+
+        TTEntry entry = transpositionTable[zobristKey % entries];
+
+        // TT cutoffs
+        if(notRoot && entry.key == zobristKey && entry.depth >= depth && (
+            entry.bound == 3 // exact score
+                || entry.bound == 2 && entry.score >= beta // lower bound, fail high
+                || entry.bound == 1 && entry.score <= alpha // upper bound, fail low
+        )) return entry.score;
         total++;
         Move[] moves = board.GetLegalMoves();
         if(moves.Length == 0) return board.IsInCheck() ? -30000 + ply : 0;
-        double best = positionEvaluator(board);
-        if(depth <= 0){
-            return best;
-        }
+        int best = positionEvaluator(board);
+        if(depth <= 0) return best;
         
         List<Move> checks = new List<Move>();
         List<Move> captures = new List<Move>();
@@ -59,17 +74,16 @@ public class MyBot : IChessBot
                 board.UndoMove(move);
             }
         }
-        
+        double origAlpha = alpha;
         best = -3000000;
         for(int i = 0; i < moves.Length; i++) {     
             if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 0;       
             Move move = getMove(checks, captures, other, i);
             //Console.WriteLine(move);
             board.MakeMove(move);
-            double score = -moveEvaluater(board, timer, depth - 1, -beta, -alpha, ply + 1);
+            int score = -moveEvaluater(board, timer, depth - 1, -beta, -alpha, ply + 1);
             board.UndoMove(move);
             if(score > best) {
-                bestEval = best;
                 best = score;
                 //bestMove = move;
                 if(ply == 0) depthMove = move;
@@ -81,8 +95,10 @@ public class MyBot : IChessBot
                 if(alpha >= beta) break;
 
             }
+            
         }
-        
+        int bound = best >= beta ? 2 : best > origAlpha ? 3 : 1;
+        transpositionTable[zobristKey % entries] = new TTEntry(zobristKey, depthMove, depth, best, bound);
         return best;
     }
     private Move getMove(List<Move> checks, List<Move> captures, List<Move> others, int index){
@@ -98,23 +114,12 @@ public class MyBot : IChessBot
     }
     private int materialDifference(Board board){
         PieceList[] list = board.GetAllPieceLists();
-        int total = list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
-        return total;
+        return list[0].Count + 3*(list[1].Count +list[2].Count) + 5*list[3].Count + 9*list[4].Count - (list[6].Count + 3*(list[7].Count +list[8].Count) + 5*list[9].Count + 9*list[10].Count);
     }
-    private double positionEvaluator(Board board){
+    private int positionEvaluator(Board board){
         Move[] moves = board.GetLegalMoves();
-        double pos = Math.Cbrt(moves.Length - 15.0) * board.PlyCount / 3000;
-        if(board.IsInCheck()){
-            pos++;
-        }
-        pos += materialDifference(board);
+        int pos = materialDifference(board);
         pos += getSpaceAdvantage(board) / 10;
-        if((board.GetPieceBitboard(PieceType.Pawn, true) & 103481868288) != 0){
-            pos += 0.5;
-        }
-        if((board.GetPieceBitboard(PieceType.Pawn, false) & (ulong)103481868288) != 0){
-            pos-= 0.5;
-        }
         return board.IsWhiteToMove ? pos : - pos;
     }
     private int getSpaceAdvantage(Board board){           
