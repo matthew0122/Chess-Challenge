@@ -7,36 +7,40 @@ public class MyBot : IChessBot
     // Piece values: null, pawn, knight, bishop, rook, queen, king
     double[] pieceValues = { 0, 1, 3, 3.10, 5, 9, 100 };
     int total = 0;
+    Move depthMove;
     Move bestMove;
+    double bestEval = 0;
     public Move Think(Board board, Timer timer)
     {
         double eval = 0;
-        int maxDepth = 5;
+        int maxDepth = 1;
         bestMove = Move.NullMove;
         Console.WriteLine("Time To Use: " + timer.MillisecondsRemaining / 30);
-        eval =  moveEvaluater(board, timer, maxDepth, -1000000, 1000000, 0);
-        /*for(int depth = 1; depth < 100; depth++){ //NOT WORKING RIGHT
+        for(int depth = 1; depth < 100; depth++){ //NOT WORKING RIGHT
             maxDepth = depth;
-            eval = moveEvaluater(board, timer, depth, -1000000, 1000000, 0);
+            double neweval = moveEvaluater(board, timer, depth, -1000000, 1000000, 0);
             if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
-        }*/
+                bestMove = depthMove;
+            eval = neweval;
+        }
         Console.WriteLine("Time Used: " + timer.MillisecondsElapsedThisTurn + " Max Depth: " + maxDepth);
-        Console.WriteLine("Eval: " + eval);
+        Console.WriteLine("Eval: " + bestEval);
         Move[] moves = board.GetLegalMoves();
         Console.WriteLine(bestMove);
         return bestMove == Move.NullMove ? moves[0] : bestMove;
     }
     private double moveEvaluater(Board board, Timer timer, double depth, double alpha, double beta, int ply){
+        if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 0;
         
         total++;
-        if(board.IsDraw()){
-            return 0;
-        }
-        if(board.IsInCheckmate()){
-            return 1000000 + depth;
-        }
         Move[] moves = board.GetLegalMoves();
+        if(moves.Length == 0) return board.IsInCheck() ? -30000 + ply : 0;
+        double best = positionEvaluator(board);
+        if(depth <= 0){
+            return best;
+        }
+        
         List<Move> checks = new List<Move>();
         List<Move> captures = new List<Move>();
         List<Move> other = new List<Move>();
@@ -55,28 +59,30 @@ public class MyBot : IChessBot
                 board.UndoMove(move);
             }
         }
-        double best = positionEvaluator(board);
-        if(depth <= 0 || moves.Length == 0){
-            return best;
-        }
-        best = -30000;
-        for(int i = 0; i < moves.Length; i++) {
-            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 3000000;
+        
+        best = -3000000;
+        for(int i = 0; i < moves.Length; i++) {     
+            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 0;       
             Move move = getMove(checks, captures, other, i);
             //Console.WriteLine(move);
-            
             board.MakeMove(move);
-            double score = -moveEvaluater(board, timer, depth-1, -beta, -alpha, ply + 1);
+            double score = -moveEvaluater(board, timer, depth - 1, -beta, -alpha, ply + 1);
             board.UndoMove(move);
-            if (score > best){
+            if(score > best) {
+                bestEval = best;
                 best = score;
                 //bestMove = move;
-                if (ply == 0) bestMove = move;
-            }
+                if(ply == 0) depthMove = move;
+                
+                // Improve alpha
+                alpha = Math.Max(alpha, score);
 
-            alpha = Math.Max(alpha, best);
-            if (alpha >= beta) break;
+                // Fail-high
+                if(alpha >= beta) break;
+
+            }
         }
+        
         return best;
     }
     private Move getMove(List<Move> checks, List<Move> captures, List<Move> others, int index){
